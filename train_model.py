@@ -50,7 +50,8 @@ trainer = create_supervised_trainer(model, optimizer, criterion)
 def thresholded_output_transform(output):
     # print(output)
     y_pred, y = output
-    y_pred = F.log_softmax(y_pred)
+    y_pred = torch.sigmoid(y_pred)
+    # y_pred = F.log_softmax(y_pred)
     y_pred = torch.round(y_pred)
     # print(y_pred)
     return y_pred, y
@@ -60,6 +61,7 @@ val_metrics = {
     "nll": Loss(criterion),
     "recall": Recall(output_transform=thresholded_output_transform),
     "precision": Precision(output_transform=thresholded_output_transform),
+    "accuracy": Accuracy(output_transform=thresholded_output_transform),
 }
 evaluator = create_supervised_evaluator(model, metrics=val_metrics)
 
@@ -74,8 +76,12 @@ def log_training_results(trainer):
     evaluator.run(train_loader)
     metrics = evaluator.state.metrics
     print(
-        "Training Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f}".format(
-            trainer.state.epoch, metrics["nll"], metrics["precision"], metrics["recall"]
+        "Training Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f} Acc: {:.2f}".format(
+            trainer.state.epoch,
+            metrics["nll"],
+            metrics["precision"],
+            metrics["recall"],
+            metrics["accuracy"],
         )
     )
 
@@ -85,11 +91,15 @@ def log_validation_results(trainer):
     evaluator.run(val_loader)
     metrics = evaluator.state.metrics
     print(
-        "Validation Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f}".format(
-            trainer.state.epoch, metrics["nll"], metrics["precision"], metrics["recall"]
+        "Validation Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f} Acc: {:.2f}".format(
+            trainer.state.epoch,
+            metrics["nll"],
+            metrics["precision"],
+            metrics["recall"],
+            metrics["accuracy"],
         )
     )
 
 
-trainer.run(train_loader, max_epochs=1)
+trainer.run(train_loader, max_epochs=2)
 
