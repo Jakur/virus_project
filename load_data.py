@@ -3,13 +3,19 @@ import pandas as pd
 import numpy as np
 import torch
 
+# import torch.nn as nn
+import torch.cuda
+
+# from torch.cuda import is_available
+
 from torch.utils.data import DataLoader, TensorDataset, Dataset
 
 
 class SeqData(Dataset):
-    def __init__(self, sequences, labels):
-        self.data = torch.from_numpy(sequences)
-        self.labels = torch.tensor(labels, dtype=torch.float)
+    def __init__(self, sequences, labels, device):
+        # self.data = torch.from_numpy(sequences)
+        self.data = torch.tensor(sequences, device=device)
+        self.labels = torch.tensor(labels, dtype=torch.float, device=device)
         self.labels = self.labels.view(-1, 1)
 
     def __len__(self):
@@ -21,7 +27,7 @@ class SeqData(Dataset):
         return data_val, label
 
 
-def get_data_loader(fname, bs, ratio=None):
+def get_data_loader(fname, bs, device, ratio=None):
     df = pd.read_csv(fname, names=["name", "seq", "class"])
     mapping = {"A": 0, "T": 1, "C": 2, "G": 3}
 
@@ -34,7 +40,7 @@ def get_data_loader(fname, bs, ratio=None):
         data = np.zeros((len(df), 300), dtype=np.int64)
         for i, d in enumerate(column):
             data[i, :] = d
-        dataset = SeqData(data, df["class"].values)
+        dataset = SeqData(data, df["class"].values, device)
     else:
         positives = (np.sum(df["class"].values) // bs) * bs
         data = np.zeros((positives * 2, 300), dtype=np.int64)
@@ -49,7 +55,7 @@ def get_data_loader(fname, bs, ratio=None):
                 break
             data[i + positives, :] = d
         labels = np.concatenate((np.ones(positives), np.zeros(positives)), axis=None)
-        dataset = SeqData(data, labels)
+        dataset = SeqData(data, labels, device)
     # Check correctness on first row
     # counter = Counter(df["seq"][0])
     # for a, b in counter.items():
@@ -64,6 +70,10 @@ def get_data_loader(fname, bs, ratio=None):
 
 
 if __name__ == "__main__":
-    x = get_data_loader("data/fullset_test.csv", 64, ratio=1)
-    print(len(x.dataset))
+    if torch.cuda.is_available():
+        print("OK")
+    if True:
+        print("OK")
+    # x = get_data_loader("data/fullset_test.csv", 64, ratio=1)
+    # print(len(x.dataset))
 

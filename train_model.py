@@ -19,6 +19,7 @@ import ignite
 
 import pandas as pd
 import torch
+import torch.cuda
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -30,21 +31,24 @@ from ignite.metrics import Accuracy, Loss, Recall, Precision
 from model import CNNTest
 from load_data import get_data_loader
 
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda:0" if use_cuda else "cpu")
+
 BAT_SIZE = 64
 
 # net = CNNTest(BAT_SIZE)
-model = CNNTest(BAT_SIZE)
+model = CNNTest(BAT_SIZE).to(device=device)
 # net = Example()
-criterion = nn.BCEWithLogitsLoss()
-# criterion = nn.BCEWithLogitsLoss(weight=torch.tensor([10]))
+# criterion = nn.BCEWithLogitsLoss()
+criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([100], device=device))
 
-optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+# optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-train_loader = get_data_loader("data/fullset_train.csv", BAT_SIZE)
-val_loader = get_data_loader("data/fullset_test.csv", BAT_SIZE)
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.8)
+train_loader = get_data_loader("data/fullset_train.csv", BAT_SIZE, device)
+val_loader = get_data_loader("data/fullset_test.csv", BAT_SIZE, device)
 
-trainer = create_supervised_trainer(model, optimizer, criterion)
+trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
 
 
 def thresholded_output_transform(output):
@@ -63,7 +67,7 @@ val_metrics = {
     "precision": Precision(output_transform=thresholded_output_transform),
     "accuracy": Accuracy(output_transform=thresholded_output_transform),
 }
-evaluator = create_supervised_evaluator(model, metrics=val_metrics)
+evaluator = create_supervised_evaluator(model, metrics=val_metrics, device=device)
 
 
 @trainer.on(Events.ITERATION_COMPLETED(every=100))
@@ -101,5 +105,5 @@ def log_validation_results(trainer):
     )
 
 
-trainer.run(train_loader, max_epochs=2)
+trainer.run(train_loader, max_epochs=20)
 
