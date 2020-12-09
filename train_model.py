@@ -28,76 +28,31 @@ from ignite.engine import Events, create_supervised_trainer, create_supervised_e
 from ignite.metrics import Accuracy, Loss, Recall, Precision
 
 from model import CNNTest
-
-
-# In[27]:
-
+from load_data import get_data_loader
 
 BAT_SIZE = 64
-
-
-# In[28]:
-
-
-class SeqData(Dataset):
-    def __init__(self, sequences, labels):
-        self.data = torch.from_numpy(sequences)
-        self.labels = torch.tensor(labels, dtype=torch.float)
-        self.labels = self.labels.view(-1, 1)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, index):
-        label = self.labels[index]
-        data_val = self.data[index]
-        return data_val, label
-
-
-# In[29]:
-
-
-def get_data_loader(fname):
-    df = pd.read_csv(fname, names=["name", "seq", "class"])
-    mapping = {"A": 0, "T": 1, "C": 2, "G": 3}
-
-    def mapping_fn(string):
-        x = [mapping[x] for x in string]
-        return x
-
-    column = df["seq"].apply(lambda x: mapping_fn(x))
-    data = np.zeros((len(df), 300), dtype=np.int64)
-    for i, d in enumerate(data):
-        data[i, :] = d
-    print(df["class"].sum())
-    dataset = SeqData(data, df["class"].values)
-    data_loader = DataLoader(dataset, batch_size=BAT_SIZE, shuffle=True, drop_last=True)
-    return data_loader
-
-
-train_loader = get_data_loader("data/fullset_test.csv")
-
-
-# In[32]:
 
 # net = CNNTest(BAT_SIZE)
 model = CNNTest(BAT_SIZE)
 # net = Example()
 criterion = nn.BCEWithLogitsLoss()
+# criterion = nn.BCEWithLogitsLoss(weight=torch.tensor([10]))
 
 optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
-train_loader = get_data_loader("data/fullset_train.csv")
-val_loader = get_data_loader("data/fullset_test.csv")
+train_loader = get_data_loader("data/fullset_train.csv", BAT_SIZE)
+val_loader = get_data_loader("data/fullset_test.csv", BAT_SIZE)
 optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.8)
 
 trainer = create_supervised_trainer(model, optimizer, criterion)
 
 
 def thresholded_output_transform(output):
+    # print(output)
     y_pred, y = output
     y_pred = F.log_softmax(y_pred)
     y_pred = torch.round(y_pred)
+    # print(y_pred)
     return y_pred, y
 
 
