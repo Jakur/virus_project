@@ -4,8 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from typing import Optional, Callable
+from torchviz import make_dot
 
-EMBEDDING_VEC_SIZE = 16
+
+EMBEDDING_VEC_SIZE = 32
 DNA_BASES = 4
 
 
@@ -43,17 +45,22 @@ class CNNTest(nn.Module):
     def __init__(self, bs):
         super(CNNTest, self).__init__()
         self.embed = nn.Embedding(DNA_BASES, EMBEDDING_VEC_SIZE)
-
         self.bb = BasicBlock(EMBEDDING_VEC_SIZE, EMBEDDING_VEC_SIZE)
         self.fc = nn.Linear(EMBEDDING_VEC_SIZE * 300, 1)
         self.bs = bs
 
+    def embedding(self, x):
+        x = self.embed(x)
+        return x
+    
     def forward(self, x: Tensor) -> Tensor:
         x = self.embed(x)
         x = x.view(self.bs, EMBEDDING_VEC_SIZE, -1)
         x = self.bb(x)
         x = x.view(self.bs, -1)
         x = self.fc(x)
+        print("make dot")
+        make_dot(x).render("resnet", format="png")
         return x
 
 

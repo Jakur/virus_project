@@ -30,6 +30,11 @@ from ignite.metrics import Accuracy, Loss, Recall, Precision
 
 from model import CNNTest
 from load_data import get_data_loader
+from sklearn.decomposition import PCA
+
+import matplotlib.pyplot as plt
+from torchviz import make_dot
+
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -39,16 +44,37 @@ BAT_SIZE = 64
 # net = CNNTest(BAT_SIZE)
 model = CNNTest(BAT_SIZE).to(device=device)
 # net = Example()
+#make_dot(model)
+
 # criterion = nn.BCEWithLogitsLoss()
 criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([100], device=device))
 
 # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-train_loader = get_data_loader("data/fullset_train.csv", BAT_SIZE, device)
-val_loader = get_data_loader("data/fullset_test.csv", BAT_SIZE, device)
+train_loader, seq_data, labels = get_data_loader("data/fullset_train.csv", BAT_SIZE, device)
+val_loader, x, l = get_data_loader("data/fullset_test.csv", BAT_SIZE, device)
 
 trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
+# nonviral_points = []
+# viral_points = []
+emb = model.embedding(seq_data)
+emb = emb.cpu().detach().numpy()
+print(emb.shape)
+# for i in range(0, emb.shape[0]):
+#     pca = PCA(n_components=2)
+#     pca.fit(emb[i][:][:])
+#     print(i, emb.shape[0])
+#     if labels[i] == 1:
+#         viral_points.append(pca.singular_values_)
+#     else:
+#         nonviral_points.append(pca.singular_values_)
+    
+
+# plt.scatter(*zip(*nonviral_points), c='lightblue', label='non-viral')
+# plt.scatter(*zip(*viral_points), c='coral', label='viral')
+# #plt.legend()
+# plt.show()
 
 
 def thresholded_output_transform(output):
@@ -105,5 +131,5 @@ def log_validation_results(trainer):
     )
 
 
-trainer.run(train_loader, max_epochs=20)
+trainer.run(train_loader, max_epochs=1)
 
