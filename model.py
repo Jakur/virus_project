@@ -6,7 +6,7 @@ from torch import Tensor
 from typing import Optional, Callable
 
 EMBEDDING_VEC_SIZE = 16
-DNA_BASES = 4
+DNA_BASES = 64
 
 
 def conv1(
@@ -43,16 +43,24 @@ class CNNTest(nn.Module):
     def __init__(self, bs):
         super(CNNTest, self).__init__()
         self.embed = nn.Embedding(DNA_BASES, EMBEDDING_VEC_SIZE)
-
-        self.bb = BasicBlock(EMBEDDING_VEC_SIZE, EMBEDDING_VEC_SIZE)
-        self.fc = nn.Linear(EMBEDDING_VEC_SIZE * 300, 1)
+        self.first = nn.Conv1d(EMBEDDING_VEC_SIZE, 64, 3)
+        self.bb = BasicBlock(64, 64)
+        # self.second = nn.Conv1d(64, 128, 3)
+        self.pool = nn.MaxPool1d(5)
+        self.drop = nn.Dropout(0.50)
+        self.fc = nn.Linear(1216, 1)
         self.bs = bs
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embed(x)
         x = x.view(self.bs, EMBEDDING_VEC_SIZE, -1)
+        x = self.first(x)
         x = self.bb(x)
+        # x = self.second(x)
+        x = self.pool(x)
         x = x.view(self.bs, -1)
+        x = self.drop(x)
+        # print(x.shape)
         x = self.fc(x)
         return x
 

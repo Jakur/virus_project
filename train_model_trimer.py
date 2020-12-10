@@ -34,19 +34,25 @@ from load_data import get_data_loader_trimers
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 
-BAT_SIZE = 64
+BAT_SIZE = 128
 
 # net = CNNTest(BAT_SIZE)
 model = CNNTest(BAT_SIZE).to(device=device)
 # net = Example()
 # criterion = nn.BCEWithLogitsLoss()
-criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([100], device=device))
+criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([5], device=device))
 
 # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+# optimizer = optim.Adam(model.parameters(), lr=1e-4)
+optimizer = optim.AdamW(model.parameters(), weight_decay=0.02)
+# optimizer = optim.RMSprop(model.parameters())
 
-train_loader, mapping = get_data_loader_trimers("data/fullset_train.csv", BAT_SIZE, device)
-val_loader, mapping = get_data_loader_trimers("data/fullset_test.csv", BAT_SIZE, device, mapping=mapping)
+train_loader, mapping = get_data_loader_trimers(
+    "data/fullset_train.csv", BAT_SIZE, device
+)
+val_loader, mapping = get_data_loader_trimers(
+    "data/fullset_test.csv", BAT_SIZE, device, mapping=mapping
+)
 print(len(mapping))
 trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
 
@@ -70,7 +76,7 @@ val_metrics = {
 evaluator = create_supervised_evaluator(model, metrics=val_metrics, device=device)
 
 
-@trainer.on(Events.ITERATION_COMPLETED(every=100))
+@trainer.on(Events.ITERATION_COMPLETED(every=500))
 def log_training_loss(trainer):
     print("Epoch[{}] Loss: {:.2f}".format(trainer.state.epoch, trainer.state.output))
 

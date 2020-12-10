@@ -40,7 +40,7 @@ BAT_SIZE = 64
 model = CNNTest(BAT_SIZE).to(device=device)
 # net = Example()
 # criterion = nn.BCEWithLogitsLoss()
-criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([100], device=device))
+criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([50], device=device))
 
 # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -70,7 +70,7 @@ val_metrics = {
 evaluator = create_supervised_evaluator(model, metrics=val_metrics, device=device)
 
 
-@trainer.on(Events.ITERATION_COMPLETED(every=100))
+@trainer.on(Events.ITERATION_COMPLETED(every=1000))
 def log_training_loss(trainer):
     print("Epoch[{}] Loss: {:.2f}".format(trainer.state.epoch, trainer.state.output))
 
