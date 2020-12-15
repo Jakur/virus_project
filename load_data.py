@@ -2,6 +2,7 @@ from collections import Counter
 import pandas as pd
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 # import torch.nn as nn
 import torch.cuda
@@ -68,15 +69,17 @@ def get_data_loader(fname, bs, device, ratio=None):
     data_loader = DataLoader(dataset, batch_size=bs, shuffle=True, drop_last=True)
     return data_loader
 
+
 def get_data_loader_trimers(fname, bs, device, ratio=None, mapping={}):
     df = pd.read_csv(fname, names=["name", "seq", "class"])
     next_val = len(mapping)
-    def mapping_fn(string):   
+
+    def mapping_fn(string):
         nonlocal next_val
         x = 0
         out = []
-        while x<len(string):
-            trimer = string[x:x+3]
+        while x < len(string):
+            trimer = string[x : x + 3]
             if trimer not in mapping:
                 mapping[trimer] = next_val
                 next_val += 1
@@ -86,24 +89,30 @@ def get_data_loader_trimers(fname, bs, device, ratio=None, mapping={}):
 
     if ratio == None:
         column = df["seq"].apply(lambda x: mapping_fn(x))
+        # print(column.nunique)
+
         data = np.zeros((len(df), 100), dtype=np.int64)
         for i, d in enumerate(column):
             data[i, :] = d
         dataset = SeqData(data, df["class"].values, device)
     else:
         positives = (np.sum(df["class"].values) // bs) * bs
-        data = np.zeros((positives * 2, 300), dtype=np.int64)
+        data = np.zeros((positives + positives * ratio, 100), dtype=np.int64)
         pos_rows = df.loc[df["class"] == 1]
         neg_rows = df.loc[df["class"] == 0]
         x = pos_rows["seq"].apply(lambda x: mapping_fn(x)).values
         for i, d in enumerate(x):
+            if i <= positives:
+                break
             data[i, :] = d
         y = neg_rows["seq"].apply(lambda x: mapping_fn(x)).values
         for i, d in enumerate(y):
-            if i <= positives * 2:
+            if i <= positives + positives * ratio:
                 break
             data[i + positives, :] = d
-        labels = np.concatenate((np.ones(positives), np.zeros(positives)), axis=None)
+        labels = np.concatenate(
+            (np.ones(positives), np.zeros(min(positives * ratio, len(y)))), axis=None
+        )
         dataset = SeqData(data, labels, device)
     # Check correctness on first row
     # counter = Counter(df["seq"][0])
@@ -118,12 +127,14 @@ def get_data_loader_trimers(fname, bs, device, ratio=None, mapping={}):
     return data_loader, mapping
 
 
-
 if __name__ == "__main__":
-    if torch.cuda.is_available():
-        print("OK")
-    if True:
-        print("OK")
-    # x = get_data_loader("data/fullset_test.csv", 64, ratio=1)
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+    x = get_data_loader("data/fullset_test.csv", 64, device, ratio=1)
+    for data, labels in x:
+        res = F.one_hot(data, num_classes=4)
+        print(res.shape)
+        print(res)
+        break
     # print(len(x.dataset))
 

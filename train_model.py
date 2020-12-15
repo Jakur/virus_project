@@ -28,16 +28,18 @@ from torch.utils.data import DataLoader, TensorDataset, Dataset
 from ignite.engine import Events, create_supervised_trainer, create_supervised_evaluator
 from ignite.metrics import Accuracy, Loss, Recall, Precision
 
-from model import CNNTest
+from model import CNNTest, FreqModel, Miner
 from load_data import get_data_loader
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 
-BAT_SIZE = 64
+BAT_SIZE = 128
 
 # net = CNNTest(BAT_SIZE)
-model = CNNTest(BAT_SIZE).to(device=device)
+# model = CNNTest(BAT_SIZE).to(device=device)
+# model = FreqModel(BAT_SIZE).to(device=device)
+model = Miner(BAT_SIZE).to(device=device)
 # net = Example()
 # criterion = nn.BCEWithLogitsLoss()
 criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([50], device=device))

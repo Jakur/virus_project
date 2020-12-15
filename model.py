@@ -5,8 +5,28 @@ import torch.nn.functional as F
 from torch import Tensor
 from typing import Optional, Callable
 
-EMBEDDING_VEC_SIZE = 16
+EMBEDDING_VEC_SIZE = 8
 DNA_BASES = 64
+
+
+def conv(
+    in_planes: int,
+    out_planes: int,
+    kernel_size,
+    stride: int = 1,
+    groups: int = 1,
+    dilation: int = 1,
+) -> nn.Conv1d:
+    return nn.Conv1d(
+        in_planes,
+        out_planes,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=dilation,
+        groups=groups,
+        bias=False,
+        dilation=dilation,
+    )
 
 
 def conv1(
@@ -39,15 +59,109 @@ def conv3(
     )
 
 
+class Miner(nn.Module):
+    def __init__(self, bs):
+        super(Miner, self).__init__()
+        self.freq = FreqModel(bs)
+        self.pat = PatternModel(bs)
+        self.fc = nn.Linear(2200, 1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        a = self.freq(x)
+        b = self.pat(x)
+        res = torch.cat((a, b), dim=1)
+        x = self.fc(res)
+        return x
+
+
+class FreqModel(nn.Module):
+    def __init__(self, bs):
+        super(FreqModel, self).__init__()
+        self.bs = bs
+        self.relu = nn.ReLU(inplace=True)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.sigmoid = nn.Sigmoid()
+        self.embed = nn.Embedding(DNA_BASES, EMBEDDING_VEC_SIZE)
+        self.conv = conv(5, 1000, 8, stride=1)
+        self.pool = nn.AvgPool1d(293)
+        self.drop1 = nn.Dropout(0.1)
+        self.fc = nn.Linear(1000, 1000)
+        self.drop2 = nn.Dropout(0.1)
+        self.fc2 = nn.Linear(1000, 1)  # Change later
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = F.one_hot(x, num_classes=5)
+        x = x.float()
+        # x = self.embed(x)
+        # print(x.shape)
+        # x = x.view(self.bs, EMBEDDING_VEC_SIZE, -1)
+        x = x.view(self.bs, 5, -1)
+        x = self.conv(x)
+        # print(x.shape)
+        x = self.relu(x)
+        # print(x.shape)
+        x = self.pool(x)
+        # print(x.shape)
+        x = self.drop1(x)
+        x = x.view(self.bs, 1000)
+        # print(x.shape)
+        x = self.fc(x)
+        # print(x.shape)
+        x = self.relu2(x)
+        # print(x.shape)
+        x = self.drop2(x)
+        # print(x.shape)
+        x = self.sigmoid(x)
+        return x
+
+
+class PatternModel(nn.Module):
+    def __init__(self, bs):
+        super(PatternModel, self).__init__()
+        self.bs = bs
+        self.relu = nn.ReLU(inplace=True)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.sigmoid = nn.Sigmoid()
+        self.embed = nn.Embedding(DNA_BASES, EMBEDDING_VEC_SIZE)
+        self.conv = conv(5, 1200, 11, stride=1)
+        self.pool = nn.MaxPool1d(290)
+        self.drop1 = nn.Dropout(0.1)
+        self.fc = nn.Linear(1200, 1200)
+        self.drop2 = nn.Dropout(0.1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = F.one_hot(x, num_classes=5)
+        x = x.float()
+        # x = self.embed(x)
+        # print(x.shape)
+        x = x.view(self.bs, 5, -1)
+        x = self.conv(x)
+        # print(x.shape)
+        x = self.relu(x)
+        # print(x.shape)
+        x = self.pool(x)
+        # print(x.shape)
+        x = self.drop1(x)
+        x = x.view(self.bs, 1200)
+        # print(x.shape)
+        x = self.fc(x)
+        # print(x.shape)
+        x = self.relu2(x)
+        # print(x.shape)
+        x = self.drop2(x)
+        # print(x.shape)
+        x = self.sigmoid(x)
+        return x
+
+
 class CNNTest(nn.Module):
     def __init__(self, bs):
         super(CNNTest, self).__init__()
         self.embed = nn.Embedding(DNA_BASES, EMBEDDING_VEC_SIZE)
         self.first = nn.Conv1d(EMBEDDING_VEC_SIZE, 64, 3)
         self.bb = BasicBlock(64, 64)
-        # self.second = nn.Conv1d(64, 128, 3)
         self.pool = nn.MaxPool1d(5)
-        self.drop = nn.Dropout(0.50)
+        self.drop = nn.Dropout(0.1)
         self.fc = nn.Linear(1216, 1)
         self.bs = bs
 
@@ -56,11 +170,9 @@ class CNNTest(nn.Module):
         x = x.view(self.bs, EMBEDDING_VEC_SIZE, -1)
         x = self.first(x)
         x = self.bb(x)
-        # x = self.second(x)
         x = self.pool(x)
         x = x.view(self.bs, -1)
         x = self.drop(x)
-        # print(x.shape)
         x = self.fc(x)
         return x
 
@@ -82,11 +194,6 @@ class BasicBlock(nn.Module):
         super(BasicBlock, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm1d
-        if groups != 1 or base_width != 64:
-            raise ValueError("BasicBlock only supports groups=1 and base_width=64")
-        if dilation > 1:
-            raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
-        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
@@ -97,20 +204,15 @@ class BasicBlock(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         identity = x
-
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-
         out = self.conv2(out)
         out = self.bn2(out)
-
         if self.downsample is not None:
             identity = self.downsample(x)
-
         out += identity
         out = self.relu(out)
-
         return out
 
 

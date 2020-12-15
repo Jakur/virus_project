@@ -26,10 +26,16 @@ import torch.optim as optim
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset, Dataset
 from ignite.engine import Events, create_supervised_trainer, create_supervised_evaluator
-from ignite.metrics import Accuracy, Loss, Recall, Precision
+from ignite.metrics import Accuracy, Loss, Recall, Precision, Fbeta
+
+from ignite.handlers import Checkpoint, DiskSaver, global_step_from_engine
 
 from model import CNNTest
 from load_data import get_data_loader_trimers
+
+from sklearn.decomposition import PCA
+
+import matplotlib.pyplot as plt
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -38,22 +44,58 @@ BAT_SIZE = 128
 
 # net = CNNTest(BAT_SIZE)
 model = CNNTest(BAT_SIZE).to(device=device)
+
+
+def plot_embedding(model, mapping):
+    parms = None
+    for x in model.embed.parameters():
+        parms = x.cpu().detach()
+        break
+    print(parms.shape)
+    parms = parms.numpy()
+    pca = PCA(n_components=2)
+    reduced = pca.fit_transform(parms)
+    # print(reduced)
+    # print(reduced.shape)
+    x = reduced[:, 0]
+    y = reduced[:, 1]
+    m = [(v, k) for k, v in mapping.items()]
+    m.sort()
+    print(m)
+    fig, ax = plt.subplots()
+    ax.scatter(x, y)
+    for i, (_, text) in enumerate(m):
+        if text in ["ATG", "TGA", "TAA", "TAG"]:
+            ax.annotate(text, (x[i], y[i]))
+    ax.set_xlabel("Reduced Dimension 0")
+    ax.set_ylabel("Reduced Dimension 1")
+    ax.set_title("PCA-Reduced Trimer Embedding")
+    plt.show()
+
+    # if labels[i] == 1:
+    #     viral_points.append(pca.singular_values_)
+    # else:
+    #     nonviral_points.append(pca.singular_values_)
+
+
 # net = Example()
 # criterion = nn.BCEWithLogitsLoss()
-criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([5], device=device))
+pos_weight = 5
+criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], device=device))
 
 # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 # optimizer = optim.Adam(model.parameters(), lr=1e-4)
-optimizer = optim.AdamW(model.parameters(), weight_decay=0.02)
+optimizer = optim.AdamW(model.parameters(), weight_decay=0.01)
 # optimizer = optim.RMSprop(model.parameters())
 
 train_loader, mapping = get_data_loader_trimers(
     "data/fullset_train.csv", BAT_SIZE, device
 )
 val_loader, mapping = get_data_loader_trimers(
-    "data/fullset_test.csv", BAT_SIZE, device, mapping=mapping
+    "data/fullset_validation.csv", BAT_SIZE, device, mapping=mapping
 )
 print(len(mapping))
+
 trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
 
 
@@ -73,7 +115,27 @@ val_metrics = {
     "precision": Precision(output_transform=thresholded_output_transform),
     "accuracy": Accuracy(output_transform=thresholded_output_transform),
 }
+val_metrics["f-score"] = Fbeta(
+    0.5, False, val_metrics["precision"], val_metrics["recall"]
+)
 evaluator = create_supervised_evaluator(model, metrics=val_metrics, device=device)
+
+
+def score_function(engine):
+    return engine.state.metrics["recall"]
+
+
+to_save = {"model": model}
+handler = Checkpoint(
+    to_save,
+    DiskSaver("models"),
+    filename_prefix=f"T{pos_weight}best",
+    score_function=score_function,
+    score_name="loss",
+    global_step_transform=global_step_from_engine(trainer),
+)
+
+evaluator.add_event_handler(Events.COMPLETED, handler)
 
 
 @trainer.on(Events.ITERATION_COMPLETED(every=500))
@@ -86,12 +148,12 @@ def log_training_results(trainer):
     evaluator.run(train_loader)
     metrics = evaluator.state.metrics
     print(
-        "Training Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f} Acc: {:.2f}".format(
+        "Training Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f} F-Score: {:.2f}".format(
             trainer.state.epoch,
             metrics["nll"],
             metrics["precision"],
             metrics["recall"],
-            metrics["accuracy"],
+            metrics["f-score"],
         )
     )
 
@@ -101,15 +163,22 @@ def log_validation_results(trainer):
     evaluator.run(val_loader)
     metrics = evaluator.state.metrics
     print(
-        "Validation Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f} Acc: {:.2f}".format(
+        "Validation Results - Epoch: {} Avg loss: {:.2f} Precision: {:.2f} Recall: {:.2f} F-Score: {:.2f}".format(
             trainer.state.epoch,
             metrics["nll"],
             metrics["precision"],
             metrics["recall"],
-            metrics["accuracy"],
+            metrics["f-score"],
         )
     )
 
 
-trainer.run(train_loader, max_epochs=20)
+trainer.run(train_loader, max_epochs=30)
 
+plot_embedding(model, mapping)
+
+
+# plt.scatter(*zip(*nonviral_points), c='lightblue', label='non-viral')
+# plt.scatter(*zip(*viral_points), c='coral', label='viral')
+# #plt.legend()
+# plt.show()
