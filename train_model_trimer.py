@@ -1,22 +1,3 @@
-# coding: utf-8
-
-# In[24]:
-
-
-# !pip3 install torch
-# !pip3 install pandas
-# get_ipython().system('pip3 install pytorch-ignite')
-
-
-# In[25]:
-
-
-import ignite
-
-
-# In[26]:
-
-
 import pandas as pd
 import torch
 import torch.cuda
@@ -24,13 +5,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
+import ignite
 from torch.utils.data import DataLoader, TensorDataset, Dataset
 from ignite.engine import Events, create_supervised_trainer, create_supervised_evaluator
 from ignite.metrics import Accuracy, Loss, Recall, Precision, Fbeta
 
 from ignite.handlers import Checkpoint, DiskSaver, global_step_from_engine
 
-from model import CNNTest
+from model import ResNet
 from load_data import get_data_loader_trimers
 
 from sklearn.decomposition import PCA
@@ -42,8 +24,7 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 
 BAT_SIZE = 128
 
-# net = CNNTest(BAT_SIZE)
-model = CNNTest(BAT_SIZE).to(device=device)
+model = ResNet(BAT_SIZE).to(device=device)
 
 
 def plot_embedding(model, mapping):
@@ -55,8 +36,6 @@ def plot_embedding(model, mapping):
     parms = parms.numpy()
     pca = PCA(n_components=2)
     reduced = pca.fit_transform(parms)
-    # print(reduced)
-    # print(reduced.shape)
     x = reduced[:, 0]
     y = reduced[:, 1]
     m = [(v, k) for k, v in mapping.items()]
@@ -72,21 +51,11 @@ def plot_embedding(model, mapping):
     ax.set_title("PCA-Reduced Trimer Embedding")
     plt.show()
 
-    # if labels[i] == 1:
-    #     viral_points.append(pca.singular_values_)
-    # else:
-    #     nonviral_points.append(pca.singular_values_)
 
-
-# net = Example()
-# criterion = nn.BCEWithLogitsLoss()
 pos_weight = 5
 criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], device=device))
 
-# optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-# optimizer = optim.Adam(model.parameters(), lr=1e-4)
 optimizer = optim.AdamW(model.parameters(), weight_decay=0.01)
-# optimizer = optim.RMSprop(model.parameters())
 
 train_loader, mapping = get_data_loader_trimers(
     "data/fullset_train.csv", BAT_SIZE, device
@@ -94,18 +63,14 @@ train_loader, mapping = get_data_loader_trimers(
 val_loader, mapping = get_data_loader_trimers(
     "data/fullset_validation.csv", BAT_SIZE, device, mapping=mapping
 )
-print(len(mapping))
 
 trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
 
 
 def thresholded_output_transform(output):
-    # print(output)
     y_pred, y = output
     y_pred = torch.sigmoid(y_pred)
-    # y_pred = F.log_softmax(y_pred)
     y_pred = torch.round(y_pred)
-    # print(y_pred)
     return y_pred, y
 
 
@@ -173,12 +138,6 @@ def log_validation_results(trainer):
     )
 
 
-trainer.run(train_loader, max_epochs=30)
+trainer.run(train_loader, max_epochs=5)
 
 plot_embedding(model, mapping)
-
-
-# plt.scatter(*zip(*nonviral_points), c='lightblue', label='non-viral')
-# plt.scatter(*zip(*viral_points), c='coral', label='viral')
-# #plt.legend()
-# plt.show()
